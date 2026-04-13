@@ -22,14 +22,36 @@ from src.wrappers import make_atari_env
 from src.dqn_agent import DQNAgent
 
 
+def make_eval_env(env_id, render_mode=None):
+    """Create eval env: no reward clipping, no episodic life (play full games)."""
+    import gymnasium as gym
+    import ale_py
+    from src.wrappers import (
+        NoopResetWrapper, MaxAndSkipWrapper,
+        GrayscaleResizeWrapper, FrameStackWrapper,
+    )
+    gym.register_envs(ale_py)
+    env = gym.make(env_id, render_mode=render_mode)
+    env = NoopResetWrapper(env, noop_max=30)
+    env = MaxAndSkipWrapper(env, skip=4)
+    # NO EpisodicLifeWrapper — play all 5 lives
+    # NO ClipRewardWrapper — see actual game scores
+    env = GrayscaleResizeWrapper(env)
+    env = FrameStackWrapper(env, n_frames=4)
+    return env
+
+
 def evaluate(agent, env_id, n_episodes=10, render_mode=None):
-    """Run evaluation episodes with greedy policy (no exploration)."""
-    env = make_atari_env(env_id, render_mode=render_mode)
+    """Run evaluation episodes with greedy policy, full games, unclipped rewards."""
+    env = make_eval_env(env_id, render_mode=render_mode)
     rewards = []
     for _ in range(n_episodes):
         obs, _ = env.reset()
+        # Press FIRE to start
+        obs, _, terminated, truncated, _ = env.step(1)
         episode_reward = 0.0
-        done = False
+        prev_lives = env.unwrapped.ale.lives()
+        done = terminated or truncated
         while not done:
             with torch.no_grad():
                 obs_t = torch.tensor(obs, dtype=torch.uint8, device=agent.device).unsqueeze(0)
@@ -37,6 +59,12 @@ def evaluate(agent, env_id, n_episodes=10, render_mode=None):
             obs, reward, terminated, truncated, _ = env.step(action)
             episode_reward += reward
             done = terminated or truncated
+            # Detect life loss and press FIRE to relaunch ball
+            lives = env.unwrapped.ale.lives()
+            if not done and lives < prev_lives:
+                obs, _, terminated, truncated, _ = env.step(1)  # FIRE
+                done = terminated or truncated
+            prev_lives = lives
         rewards.append(episode_reward)
     env.close()
     return np.mean(rewards), np.std(rewards)
