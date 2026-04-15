@@ -1,36 +1,33 @@
 """
 Plot DQN training results from TensorBoard event files.
+Shows mean +/- std across seeds 0, 1, 2 for the 10M run.
 """
 
 import os
 import struct
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
+import matplotlib.gridspec as gridspec
 
 
 def read_tfevents(path):
-    """Parse a TFEvents file and return {tag: [(step, value), ...]}."""
     scalars = {}
     with open(path, "rb") as f:
         data = f.read()
-
     offset = 0
     while offset < len(data):
         if offset + 12 > len(data):
             break
         length = struct.unpack_from("<Q", data, offset)[0]
-        offset += 12  # uint64 length + uint32 masked_crc32
+        offset += 12
         if offset + length + 4 > len(data):
             break
         record = data[offset: offset + length]
         offset += length + 4
-
         try:
             _parse_event(record, scalars)
         except Exception:
             pass
-
     return scalars
 
 
@@ -83,73 +80,119 @@ def _parse_event(record, scalars):
             scalars.setdefault(tag, []).append((step, float_val))
 
 
-def smooth(values, weight=0.6):
+def smooth(values, weight=0.7):
     smoothed, last = [], values[0]
     for v in values:
         last = last * weight + v * (1 - weight)
         smoothed.append(last)
-    return smoothed
+    return np.array(smoothed)
 
 
-# ── locate runs ──────────────────────────────────────────────────────────────
-runs_dir = os.path.join("results", "runs")
-runs = {
-    "2M (Mac MPS)":  "Breakout-v5_seed0_1775988250",
-    "5M (CUDA)":     "Breakout-v5_seed0_1776032526",
-    "10M (CUDA)":    "Breakout-v5_seed0_1776070538",
-}
-colors = {"2M (Mac MPS)": "#4C72B0", "5M (CUDA)": "#DD8452", "10M (CUDA)": "#55A868"}
-
-fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-fig.suptitle("DQN on ALE/Breakout-v5 — Seed 0", fontsize=14, fontweight="bold")
-
-for label, run_id in runs.items():
-    path = os.path.join(runs_dir, run_id)
+def get_scalars(run_id, tag):
+    path = os.path.join("results", "runs", run_id)
     tf_file = next(f for f in os.listdir(path) if f.startswith("events"))
     scalars = read_tfevents(os.path.join(path, tf_file))
-    color = colors[label]
+    if tag not in scalars:
+        return np.array([]), np.array([])
+    pts = sorted(scalars[tag])
+    return np.array([p[0] for p in pts]), np.array([p[1] for p in pts])
 
-    # ── Eval mean reward ─────────────────────────────────────────────────────
-    if "eval/mean_reward" in scalars:
-        pts = sorted(scalars["eval/mean_reward"])
-        steps = [p[0] / 1e6 for p in pts]
-        means = [p[1] for p in pts]
-        stds  = [p[1] for p in sorted(scalars.get("eval/std_reward", []))]
 
-        sm = smooth(means)
-        axes[0].plot(steps, sm, color=color, label=label, linewidth=1.8)
-        axes[0].fill_between(
-            steps,
-            [m - s for m, s in zip(means, stds)],
-            [m + s for m, s in zip(means, stds)],
-            alpha=0.12, color=color
-        )
+# ── runs ──────────────────────────────────────────────────────────────────────
+runs_dir = "results/runs"
+seed_runs = {
+    0: "Breakout-v5_seed0_1776070538",
+    1: "Breakout-v5_seed1_1776135513",
+    2: "Breakout-v5_seed2_1776194883",
+}
+COLORS = {"mean": "#2196F3", "seeds": ["#4CAF50", "#FF9800", "#9C27B0"]}
 
-    # ── Train avg100 reward ───────────────────────────────────────────────────
-    if "train/avg_reward_100" in scalars:
-        pts = sorted(scalars["train/avg_reward_100"])
-        steps = [p[0] / 1e6 for p in pts]
-        vals  = [p[1] for p in pts]
-        sm = smooth(vals, weight=0.85)
-        axes[1].plot(steps, sm, color=color, label=label, linewidth=1.8)
+# ── collect eval data across seeds ───────────────────────────────────────────
+eval_data = {}
+for seed, run_id in seed_runs.items():
+    steps, vals = get_scalars(run_id, "eval/mean_reward")
+    eval_data[seed] = (steps, vals)
 
-# ── axes formatting ───────────────────────────────────────────────────────────
-axes[0].set_title("Eval Mean Reward (unclipped, full games)")
-axes[0].set_xlabel("Timesteps (M)")
-axes[0].set_ylabel("Mean Reward")
-axes[0].legend()
-axes[0].grid(True, alpha=0.3)
-axes[0].set_xlim(left=0)
+# Align to common steps (trim to shortest seed)
+min_len = min(len(eval_data[s][0]) for s in [0, 1, 2])
+ref_steps = eval_data[0][0][:min_len]
+aligned = np.stack([eval_data[s][1][:min_len] for s in [0, 1, 2]])
+print(f"Eval points per seed: { {s: len(eval_data[s][0]) for s in [0,1,2]} }")
+mean_eval = aligned.mean(axis=0)
+std_eval  = aligned.std(axis=0)
 
-axes[1].set_title("Train Avg Reward (100-ep rolling, clipped)")
-axes[1].set_xlabel("Timesteps (M)")
-axes[1].set_ylabel("Avg Reward (clipped)")
-axes[1].legend()
-axes[1].grid(True, alpha=0.3)
-axes[1].set_xlim(left=0)
+# ── collect train avg100 across seeds ─────────────────────────────────────────
+train_data = {}
+for seed, run_id in seed_runs.items():
+    steps, vals = get_scalars(run_id, "train/avg_reward_100")
+    train_data[seed] = (steps, vals)
 
-plt.tight_layout()
-out = "results/training_comparison.png"
+min_train_len = min(len(train_data[s][0]) for s in [0, 1, 2])
+ref_train_steps = train_data[0][0][:min_train_len]
+aligned_train = np.stack([train_data[s][1][:min_train_len] for s in [0, 1, 2]])
+mean_train = aligned_train.mean(axis=0)
+std_train  = aligned_train.std(axis=0)
+
+# ── collect fps ───────────────────────────────────────────────────────────────
+fps_per_seed = {}
+for seed, run_id in seed_runs.items():
+    _, vals = get_scalars(run_id, "train/fps")
+    fps_per_seed[seed] = vals
+
+# ── plot ──────────────────────────────────────────────────────────────────────
+fig = plt.figure(figsize=(16, 10))
+fig.suptitle("DQN on ALE/Breakout-v5 — 10M Steps, Seeds 0/1/2", fontsize=15, fontweight="bold", y=0.98)
+gs = gridspec.GridSpec(2, 2, hspace=0.38, wspace=0.3)
+
+ax1 = fig.add_subplot(gs[0, :])   # top: eval mean across seeds (full width)
+ax2 = fig.add_subplot(gs[1, 0])   # bottom left: individual seeds
+ax3 = fig.add_subplot(gs[1, 1])   # bottom right: train avg100
+
+# ── ax1: mean ± std eval ──────────────────────────────────────────────────────
+x = ref_steps / 1e6
+sm_mean = smooth(mean_eval, weight=0.6)
+ax1.plot(x, sm_mean, color=COLORS["mean"], linewidth=2.2, label="Mean (seeds 0–2)")
+ax1.fill_between(x, mean_eval - std_eval, mean_eval + std_eval,
+                 alpha=0.2, color=COLORS["mean"], label="±1 std")
+ax1.set_title("Eval Mean Reward — Mean ± Std across 3 Seeds", fontsize=12)
+ax1.set_xlabel("Timesteps (M)")
+ax1.set_ylabel("Mean Reward (unclipped)")
+ax1.legend(fontsize=10)
+ax1.grid(True, alpha=0.3)
+ax1.set_xlim(0, 10)
+
+# ── ax2: individual seed eval curves ─────────────────────────────────────────
+for seed, color in zip([0, 1, 2], COLORS["seeds"]):
+    steps, vals = eval_data[seed]
+    sm = smooth(vals, weight=0.6)
+    ax2.plot(steps / 1e6, sm, color=color, linewidth=1.6, label=f"Seed {seed}")
+ax2.set_title("Eval Reward — Individual Seeds", fontsize=12)
+ax2.set_xlabel("Timesteps (M)")
+ax2.set_ylabel("Mean Reward (unclipped)")
+ax2.legend(fontsize=10)
+ax2.grid(True, alpha=0.3)
+ax2.set_xlim(0, 10)
+
+# ── ax3: train avg100 mean ± std ──────────────────────────────────────────────
+x_train = ref_train_steps / 1e6
+sm_train = smooth(mean_train, weight=0.9)
+ax3.plot(x_train, sm_train, color=COLORS["mean"], linewidth=2.0, label="Mean (seeds 0–2)")
+ax3.fill_between(x_train, mean_train - std_train, mean_train + std_train,
+                 alpha=0.2, color=COLORS["mean"], label="±1 std")
+ax3.set_title("Train Avg Reward (100-ep rolling, clipped)", fontsize=12)
+ax3.set_xlabel("Timesteps (M)")
+ax3.set_ylabel("Avg Reward (clipped)")
+ax3.legend(fontsize=10)
+ax3.grid(True, alpha=0.3)
+ax3.set_xlim(0, 10)
+
+out = "results/training_3seeds.png"
 plt.savefig(out, dpi=150, bbox_inches="tight")
 print(f"Saved: {out}")
+
+# Print final stats for README
+print("\n=== Final Stats ===")
+for s in [0, 1, 2]:
+    steps, vals = eval_data[s]
+    print(f"Seed {s}: final_eval={vals[-1]:.1f}, max_eval={max(vals):.1f}")
 plt.show()
