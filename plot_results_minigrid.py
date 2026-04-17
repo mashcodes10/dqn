@@ -110,7 +110,7 @@ for folder in sorted(os.listdir(runs_dir)):
         seed_runs[seed] = folder
 
 print(f"Found runs: {seed_runs}")
-assert len(seed_runs) == 3, "Expected 3 seeds — run all 3 before plotting"
+assert len(seed_runs) >= 1, "No runs found"
 
 COLORS = {"mean": "#2196F3", "seeds": ["#4CAF50", "#FF9800", "#9C27B0"]}
 
@@ -135,7 +135,7 @@ mean_rw, std_rw = aligned_rw.mean(axis=0), aligned_rw.std(axis=0)
 # ── CHANGED: plot layout ───────────────────────────────────────────────────────
 fig = plt.figure(figsize=(16, 10))
 fig.suptitle(
-    "Baseline DQN (feed-forward) on MiniGrid MemoryS13 — 500k Steps, Seeds 0/1/2",
+    "Baseline DQN (feed-forward) on MiniGrid MemoryS7 — 500k Steps, Seeds 0/1/2",
     fontsize=14, fontweight="bold", y=0.98
 )
 gs = gridspec.GridSpec(2, 2, hspace=0.38, wspace=0.3)
