@@ -123,6 +123,18 @@ for seed, run_id in seed_runs.items():
     success_data[seed] = (s_steps, s_vals)
     reward_data[seed]  = (r_steps, r_vals)
 
+# ── print stats for each seed ─────────────────────────────────────────────────
+print("\n=== Stats ===")
+for seed in sorted(seed_runs):
+    steps, vals = success_data[seed]
+    if len(vals) == 0:
+        print(f"Seed {seed}: no data")
+        continue
+    print(f"Seed {seed}:")
+    print(f"  Mean success rate: {np.mean(vals)*100:.1f}%")
+    print(f"  Max success rate:  {np.max(vals)*100:.1f}%")
+    print(f"  Final (last 10):   {np.mean(vals[-10:])*100:.1f}%")
+
 # Align to shortest seed
 min_len    = min(len(success_data[s][0]) for s in seed_runs)
 ref_steps  = success_data[list(seed_runs.keys())[0]][0][:min_len]
@@ -132,74 +144,24 @@ aligned_rw = np.stack([reward_data[s][1][:min_len]  for s in sorted(seed_runs)])
 mean_sr, std_sr = aligned_sr.mean(axis=0), aligned_sr.std(axis=0)
 mean_rw, std_rw = aligned_rw.mean(axis=0), aligned_rw.std(axis=0)
 
-# ── CHANGED: plot layout ───────────────────────────────────────────────────────
-fig = plt.figure(figsize=(16, 10))
-fig.suptitle(
-    "Baseline DQN (feed-forward) on MiniGrid MemoryS7 — 500k Steps, Seeds 0/1/2",
-    fontsize=14, fontweight="bold", y=0.98
-)
-gs = gridspec.GridSpec(2, 2, hspace=0.38, wspace=0.3)
 
-ax1 = fig.add_subplot(gs[0, :])   # top: success rate mean (full width)
-ax2 = fig.add_subplot(gs[1, 0])   # bottom left: individual seed success rates
-ax3 = fig.add_subplot(gs[1, 1])   # bottom right: mean reward
+fig, ax = plt.subplots(figsize=(12, 5))
 
-# ── ax1: mean ± std success rate — the headline plot ─────────────────────────
-x = ref_steps / 1e3   # show in thousands of steps, not millions
-ax1.plot(x, mean_sr * 100, color=COLORS["mean"], linewidth=2.2,
-         label="Mean success rate (seeds 0–2)")
-ax1.fill_between(x,
-                 (mean_sr - std_sr) * 100,
-                 (mean_sr + std_sr) * 100,
-                 alpha=0.2, color=COLORS["mean"], label="±1 std")
-# CHANGED: add the random chance line — this is the key visual for the report
-ax1.axhline(50, color="red", linestyle="--", linewidth=1.8,
-            label="Random chance (50%)")
-ax1.set_title("Success Rate — Mean ± Std across 3 Seeds", fontsize=12)
-ax1.set_xlabel("Training steps (thousands)")
-ax1.set_ylabel("Success rate (%)")
-ax1.legend(fontsize=10)
-ax1.grid(True, alpha=0.3)
-ax1.set_ylim(0, 100)
+seed = list(seed_runs.keys())[0]
+steps, vals = success_data[seed]
+sm = smooth(vals * 100, weight=0.6)
 
-# ── ax2: individual seed success rate curves ──────────────────────────────────
-for seed, color in zip(sorted(seed_runs), COLORS["seeds"]):
-    steps, vals = success_data[seed]
-    ax2.plot(steps / 1e3, vals * 100, color=color,
-             linewidth=1.6, label=f"Seed {seed}", alpha=0.8)
-ax2.axhline(50, color="red", linestyle="--", linewidth=1.5,
-            label="Random chance")
-ax2.set_title("Success Rate — Individual Seeds", fontsize=12)
-ax2.set_xlabel("Training steps (thousands)")
-ax2.set_ylabel("Success rate (%)")
-ax2.legend(fontsize=10)
-ax2.grid(True, alpha=0.3)
-ax2.set_ylim(0, 100)
+ax.plot(steps, sm, color="#2196F3", linewidth=2.0, label=f"seed {seed}")
+ax.axhline(50, color="red", linestyle="--", linewidth=1.5, label="Random chance (50%)")
+ax.set_title("DQN on MiniGrid MemoryS7")
+ax.set_xlabel("Timesteps")
+ax.set_ylabel("Success Rate (%)")
+ax.set_ylim(0, 100)
+ax.legend()
+ax.grid(True, alpha=0.3)
 
-# ── ax3: mean reward ──────────────────────────────────────────────────────────
-ax3.plot(ref_steps / 1e3, mean_rw, color=COLORS["mean"],
-         linewidth=2.0, label="Mean reward (seeds 0–2)")
-ax3.fill_between(ref_steps / 1e3,
-                 mean_rw - std_rw,
-                 mean_rw + std_rw,
-                 alpha=0.2, color=COLORS["mean"], label="±1 std")
-ax3.set_title("Eval Mean Reward", fontsize=12)
-ax3.set_xlabel("Training steps (thousands)")
-ax3.set_ylabel("Mean reward")
-ax3.legend(fontsize=10)
-ax3.grid(True, alpha=0.3)
-
-out = "results/memory_baseline_3seeds.png"
+out = "results/memory_baseline_seed0.png"
+plt.tight_layout()
 plt.savefig(out, dpi=150, bbox_inches="tight")
 print(f"Saved: {out}")
-
-# ── CHANGED: print final stats matching your README table format ──────────────
-print("\n=== Final Stats ===")
-for seed in sorted(seed_runs):
-    _, sr_vals = success_data[seed]
-    _, rw_vals = reward_data[seed]
-    print(f"Seed {seed}: final_success={sr_vals[-1]*100:.1f}%  "
-          f"mean_success={sr_vals.mean()*100:.1f}%  "
-          f"final_reward={rw_vals[-1]:.3f}")
-
 plt.show()
