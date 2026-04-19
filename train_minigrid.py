@@ -10,7 +10,7 @@ from minigrid.wrappers import RGBImgPartialObsWrapper, ImgObsWrapper
 from collections import deque
 from torch.utils.tensorboard import SummaryWriter
 
-TOTAL_STEPS     = 500_000
+TOTAL_STEPS     = 2_000_000
 BUFFER_SIZE     = 50_000
 BATCH_SIZE      = 32
 GAMMA           = 0.99
