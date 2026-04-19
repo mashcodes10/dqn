@@ -10,7 +10,7 @@ from minigrid.wrappers import RGBImgPartialObsWrapper, ImgObsWrapper
 from collections import deque
 from torch.utils.tensorboard import SummaryWriter
 
-TOTAL_STEPS     = 2_000_000
+DEFAULT_TOTAL_STEPS = 500_000
 BUFFER_SIZE     = 50_000
 BATCH_SIZE      = 32
 GAMMA           = 0.99
@@ -109,7 +109,7 @@ def evaluate(env_seed_offset, policy_net, device, n_episodes=EVAL_EPISODES):
     return total_reward / n_episodes, successes / n_episodes
 
 
-def train(seed, device):
+def train(seed, device, total_steps=DEFAULT_TOTAL_STEPS):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -137,7 +137,7 @@ def train(seed, device):
     ep_count  = 0
     losses    = []
 
-    for step in range(1, TOTAL_STEPS + 1):
+    for step in range(1, total_steps + 1):
 
         eps = max(EPS_END, EPS_START - (EPS_START - EPS_END) * step / EPS_DECAY_STEPS)
         if random.random() < eps:
@@ -215,8 +215,9 @@ def train(seed, device):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--seed",   type=int, default=0)
-    parser.add_argument("--device", type=str,
+    parser.add_argument("--seed",        type=int, default=0)
+    parser.add_argument("--device",      type=str,
                         default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--total-steps", type=int, default=DEFAULT_TOTAL_STEPS)
     args = parser.parse_args()
-    train(args.seed, args.device)
+    train(args.seed, args.device, args.total_steps)
