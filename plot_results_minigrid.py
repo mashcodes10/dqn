@@ -147,7 +147,7 @@ mean_rw, std_rw = aligned_rw.mean(axis=0), aligned_rw.std(axis=0)
 
 fig, ax = plt.subplots(figsize=(12, 5))
 
-seed = list(seed_runs.keys())[0]
+seed = max(seed_runs, key=lambda s: seed_runs[s].split("_")[-1])
 steps, vals = success_data[seed]
 sm = smooth(vals * 100, weight=0.6)
 
@@ -160,7 +160,7 @@ ax.set_ylim(0, 100)
 ax.legend()
 ax.grid(True, alpha=0.3)
 
-out = "results/memory_baseline_seed0.png"
+out = f"results/memory_baseline_seed{seed}.png"
 plt.tight_layout()
 plt.savefig(out, dpi=150, bbox_inches="tight")
 print(f"Saved: {out}")
