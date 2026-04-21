@@ -9,7 +9,7 @@ This project has two phases:
 | Phase | Environment | Goal | Status |
 |-------|------------|------|--------|
 | **Phase 1: Reproduction** | ALE Breakout (Atari) | Train DQN from pixels, show it learns | Complete |
-| **Phase 2: Adaptation** | MiniGrid MemoryEnv | Add recurrent memory (DRQN) to handle partial observability | Not Started |
+| **Phase 2: Adaptation** | MiniGrid MemoryEnv | Add recurrent memory (DRQN) to handle partial observability | Complete |
 
 ## Paper Reference
 
@@ -35,13 +35,16 @@ Key ideas reproduced:
 │   ├── breakout.json       # Base config
 │   ├── breakout_5m.json    # 5M step config
 │   └── breakout_10m.json   # 10M step config (used for final results)
-├── train_atari.py          # Main training script with TensorBoard logging
-├── plot_results.py         # Script to generate result plots
+├── train_atari.py          # Phase 1: DQN Atari training script
+├── train_minigrid.py       # Phase 2: Baseline DQN on MiniGrid
+├── train_minigrid_drqn.py  # Phase 2: DRQN (DQN + LSTM) on MiniGrid
+├── plot_results.py         # Atari result plots
+├── plot_results_minigrid.py # MiniGrid result plots
 ├── DQN_Breakout_Colab.ipynb # Google Colab notebook (Drive checkpoints + auto-resume)
 ├── results/
 │   ├── runs/               # TensorBoard logs
 │   ├── checkpoints/        # Model checkpoints (.pt files)
-│   └── training_3seeds.png # Final results plot
+│   └── training_3seeds.png # Phase 1 results plot
 └── Final_Project.pdf       # Project assignment specification
 ```
 
@@ -72,6 +75,8 @@ Upload `DQN_Breakout_Colab.ipynb` to Colab. It handles all installation, saves c
 
 ## Training
 
+### Phase 1: Atari Breakout
+
 ```bash
 conda activate dqn
 
@@ -83,14 +88,35 @@ python train_atari.py --config configs/breakout_10m.json --seed 0 --device cuda 
 python train_atari.py --config configs/breakout_10m.json --seed 1 --device cuda && \
 python train_atari.py --config configs/breakout_10m.json --seed 2 --device cuda
 
-# Monitor
-tensorboard --logdir results/runs
-
 # Plot
 python plot_results.py
 ```
 
+### Phase 2: MiniGrid MemoryEnv
+
+```bash
+conda activate dqn
+
+# Baseline DQN (2M steps, 3 seeds)
+run_baseline_2m_seed0.bat  # or: python train_minigrid.py --seed 0 --total-steps 2000000
+run_baseline_2m_seed1.bat
+run_baseline_2m_seed2.bat
+
+# DRQN (2M steps, sequence length 10, 3 seeds)
+run_drqn_seed0.bat  # or: python train_minigrid_drqn.py --seed 0 --seq-len 10 --total-steps 2000000
+run_drqn_seed1.bat
+run_drqn_seed2.bat
+
+# Monitor all runs
+tensorboard --logdir results/runs
+
+# Plot MiniGrid results
+python plot_results_minigrid.py
+```
+
 ## Hyperparameters
+
+### Phase 1: DQN (Atari Breakout)
 
 | Parameter | Our Value | Paper Value | Notes |
 |-----------|----------|-------------|-------|
@@ -106,6 +132,24 @@ python plot_results.py
 | Frame skip | 4 | 4 | Same |
 | Frame stack | 4 | 4 | Same |
 | Input size | 84x84 grayscale | 84x84 grayscale | Same |
+
+### Phase 2: DRQN (MiniGrid MemoryEnv)
+
+| Parameter | Value |
+|-----------|-------|
+| Total steps | 2M |
+| Architecture | CNN (3 conv) → LSTM (hidden=256) → FC |
+| Sequence length (L) | 10 |
+| Batch size | 16 sequences |
+| Replay buffer | 2,000 episodes |
+| Discount (γ) | 0.99 |
+| Learning rate | 1e-4 (Adam) |
+| Epsilon start / end | 1.0 / 0.1 |
+| Epsilon decay | 150,000 steps |
+| Target update freq | 1,000 steps |
+| Training freq | Every 4 steps |
+| Learning starts | 2,000 steps |
+| Input | 56×56 RGB partial observation |
 
 ## Results
 
@@ -137,12 +181,27 @@ All 3 seeds trained for 10M steps on NVIDIA RTX PRO 500 Blackwell GPU (~165 FPS)
 
 Our agent surpasses human-level performance. The gap to the paper's 401 is explained by: smaller replay buffer (200k vs 1M), fewer training frames (10M vs 50M agent steps), and slower epsilon decay.
 
-### Phase 2: Adaptation (Planned)
+### Phase 2: MiniGrid MemoryEnv (Complete)
 
-- [ ] Run baseline DQN on MiniGrid MemoryEnv → expect ~50% success (random guessing)
-- [ ] Implement DRQN (DQN + LSTM) with sequence replay buffer
-- [ ] Train DRQN on MemoryEnv → expect success rate well above 50%
-- [ ] Run ablation (e.g., sequence length, LSTM vs no-LSTM)
+Environment: `MiniGrid-MemoryS7-v0` — agent must remember an object seen at the start of the episode and identify a matching object later. Requires memory across timesteps; a memoryless agent performs near chance (~50%).
+
+#### Baseline DQN (no memory, 2M steps)
+
+| Seed | Final Eval Reward | Best Eval Reward | Final Success Rate | Best Success Rate |
+|------|------------------|-----------------|-------------------|------------------|
+| 0 | 0.120 | 0.394 | 23.0% | 45.0% |
+
+The baseline DQN fails to solve the task, confirming that feedforward Q-networks cannot bridge the memory gap.
+
+#### DRQN (CNN + LSTM, sequence length 10, 2M steps)
+
+| Seed | Final Eval Reward | Best Eval Reward | Final Success Rate | Best Success Rate |
+|------|------------------|-----------------|-------------------|------------------|
+| 0 | 0.979 | 0.980 | **100%** | 100% |
+| 1 | 0.962 | 0.981 | **100%** | 100% |
+| 2 | 0.900 | 0.980 | 92% | 100% |
+
+DRQN achieves near-perfect performance across all seeds, with all three seeds reaching 100% success rate at some point during training. The recurrent state allows the agent to remember the target object across the full episode.
 
 ## Known Issues & Divergences from Paper
 
@@ -165,10 +224,13 @@ Our agent surpasses human-level performance. The gap to the paper's 401 is expla
 
 | Run | Device | Steps | Approx Time |
 |-----|--------|-------|-------------|
-| Seed 0 (2M) | Apple M4 MPS | 2M | ~3 hours |
-| Seed 0 (10M) | NVIDIA RTX PRO 500 Blackwell | 10M | ~17 hours |
-| Seed 1 (10M) | NVIDIA RTX PRO 500 Blackwell | 10M | ~17 hours |
-| Seed 2 (10M) | NVIDIA RTX PRO 500 Blackwell | 10M | ~17 hours |
+| Breakout seed 0 (2M) | Apple M4 MPS | 2M | ~3 hours |
+| Breakout seed 0 (10M) | NVIDIA RTX PRO 500 Blackwell | 10M | ~17 hours |
+| Breakout seed 1 (10M) | NVIDIA RTX PRO 500 Blackwell | 10M | ~17 hours |
+| Breakout seed 2 (10M) | NVIDIA RTX PRO 500 Blackwell | 10M | ~17 hours |
+| DRQN seed 0 (2M) | NVIDIA RTX PRO 500 Blackwell | 2M | ~5 hours |
+| DRQN seed 1 (2M) | NVIDIA RTX PRO 500 Blackwell | 2M | ~5 hours |
+| DRQN seed 2 (2M) | NVIDIA RTX PRO 500 Blackwell | 2M | ~5 hours |
 
 ## References
 

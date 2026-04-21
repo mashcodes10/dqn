@@ -1,17 +1,17 @@
 """
-Plot baseline DQN on MiniGrid MemoryEnv results.
-Reuses plot_results.py structure — swaps metric to success_rate,
-adds 50% random chance baseline, auto-discovers run folders.
+Plot Baseline DQN vs DRQN on MiniGrid MemoryS7.
+Shows success rate and mean reward for both methods.
 """
 
 import os
 import struct
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
 
-# ── copy these functions exactly from plot_results.py (unchanged) ─────────────
 def read_tfevents(path):
     scalars = {}
     with open(path, "rb") as f:
@@ -82,14 +82,6 @@ def _parse_event(record, scalars):
             scalars.setdefault(tag, []).append((step, float_val))
 
 
-def smooth(values, weight=0.7):
-    smoothed, last = [], values[0]
-    for v in values:
-        last = last * weight + v * (1 - weight)
-        smoothed.append(last)
-    return np.array(smoothed)
-
-
 def get_scalars(run_id, tag):
     path = os.path.join("results", "runs", run_id)
     tf_file = next(f for f in os.listdir(path) if f.startswith("events"))
@@ -100,68 +92,153 @@ def get_scalars(run_id, tag):
     return np.array([p[0] for p in pts]), np.array([p[1] for p in pts])
 
 
-# ── CHANGED: auto-discover memory baseline run folders ────────────────────────
-runs_dir = "results/runs"
-seed_runs = {}
-for folder in sorted(os.listdir(runs_dir)):
-    if folder.startswith("memory_baseline_seed"):
-        # folder name: memory_baseline_seed0_<timestamp>
-        seed = int(folder.split("seed")[1].split("_")[0])
-        seed_runs[seed] = folder
-
-print(f"Found runs: {seed_runs}")
-assert len(seed_runs) >= 1, "No runs found"
-
-COLORS = {"mean": "#2196F3", "seeds": ["#4CAF50", "#FF9800", "#9C27B0"]}
-
-# ── CHANGED: collect success_rate and reward across seeds ─────────────────────
-success_data = {}
-reward_data  = {}
-for seed, run_id in seed_runs.items():
-    s_steps, s_vals = get_scalars(run_id, "eval/success_rate")   # ← new metric
-    r_steps, r_vals = get_scalars(run_id, "eval/mean_reward")
-    success_data[seed] = (s_steps, s_vals)
-    reward_data[seed]  = (r_steps, r_vals)
-
-# ── print stats for each seed ─────────────────────────────────────────────────
-print("\n=== Stats ===")
-for seed in sorted(seed_runs):
-    steps, vals = success_data[seed]
-    if len(vals) == 0:
-        print(f"Seed {seed}: no data")
-        continue
-    print(f"Seed {seed}:")
-    print(f"  Mean success rate: {np.mean(vals)*100:.1f}%")
-    print(f"  Max success rate:  {np.max(vals)*100:.1f}%")
-    print(f"  Final (last 10):   {np.mean(vals[-10:])*100:.1f}%")
-
-# Align to shortest seed
-min_len    = min(len(success_data[s][0]) for s in seed_runs)
-ref_steps  = success_data[list(seed_runs.keys())[0]][0][:min_len]
-aligned_sr = np.stack([success_data[s][1][:min_len] for s in sorted(seed_runs)])
-aligned_rw = np.stack([reward_data[s][1][:min_len]  for s in sorted(seed_runs)])
-
-mean_sr, std_sr = aligned_sr.mean(axis=0), aligned_sr.std(axis=0)
-mean_rw, std_rw = aligned_rw.mean(axis=0), aligned_rw.std(axis=0)
+def discover_runs(prefix):
+    runs_dir = "results/runs"
+    seed_runs = {}
+    for folder in sorted(os.listdir(runs_dir)):
+        if folder.startswith(prefix):
+            seed = int(folder.split("seed")[1].split("_")[0])
+            if seed not in seed_runs:  # keep first (earliest) match per seed
+                seed_runs[seed] = folder
+    return seed_runs
 
 
-fig, ax = plt.subplots(figsize=(12, 5))
+def collect_data(seed_runs, tag):
+    data = {}
+    for seed, run_id in seed_runs.items():
+        steps, vals = get_scalars(run_id, tag)
+        data[seed] = (steps, vals)
+    return data
 
-seed = max(seed_runs, key=lambda s: seed_runs[s].split("_")[-1])
-steps, vals = success_data[seed]
-sm = smooth(vals * 100, weight=0.6)
 
-ax.plot(steps, sm, color="#2196F3", linewidth=2.0, label=f"seed {seed}")
-ax.axhline(50, color="red", linestyle="--", linewidth=1.5, label="Random chance (50%)")
-ax.set_title("DQN on MiniGrid MemoryS7")
-ax.set_xlabel("Timesteps")
-ax.set_ylabel("Success Rate (%)")
-ax.set_ylim(0, 100)
-ax.legend()
-ax.grid(True, alpha=0.3)
+def mean_std(data, seeds):
+    min_len = min(len(data[s][1]) for s in seeds)
+    ref_steps = data[seeds[0]][0][:min_len]
+    stacked = np.stack([data[s][1][:min_len] for s in seeds])
+    return ref_steps, stacked.mean(axis=0), stacked.std(axis=0)
 
-out = f"results/memory_baseline_seed{seed}.png"
-plt.tight_layout()
+
+# ── discover runs ─────────────────────────────────────────────────────────────
+baseline_runs = discover_runs("memory_baseline_seed")
+drqn_runs     = discover_runs("memory_drqn_seed")
+
+print(f"Baseline runs: {baseline_runs}")
+print(f"DRQN runs:     {drqn_runs}")
+
+assert len(baseline_runs) >= 1, "No baseline runs found"
+assert len(drqn_runs)     >= 1, "No DRQN runs found"
+
+baseline_seeds = sorted(baseline_runs)
+drqn_seeds     = sorted(drqn_runs)
+
+# ── collect metrics ───────────────────────────────────────────────────────────
+bl_sr = collect_data(baseline_runs, "eval/success_rate")
+bl_rw = collect_data(baseline_runs, "eval/mean_reward")
+dr_sr = collect_data(drqn_runs,    "eval/success_rate")
+dr_rw = collect_data(drqn_runs,    "eval/mean_reward")
+
+# mean ± std (gracefully handles single-seed case)
+bl_steps_sr, bl_mean_sr, bl_std_sr = mean_std(bl_sr, baseline_seeds)
+bl_steps_rw, bl_mean_rw, bl_std_rw = mean_std(bl_rw, baseline_seeds)
+dr_steps_sr, dr_mean_sr, dr_std_sr = mean_std(dr_sr, drqn_seeds)
+dr_steps_rw, dr_mean_rw, dr_std_rw = mean_std(dr_rw, drqn_seeds)
+
+# ── plot ──────────────────────────────────────────────────────────────────────
+BL_COLOR   = "#FF7043"   # orange-red for baseline
+DRQN_COLOR = "#2196F3"   # blue for DRQN
+SEED_COLORS = ["#4CAF50", "#FF9800", "#9C27B0"]
+
+fig = plt.figure(figsize=(16, 11))
+fig.suptitle(
+    "Baseline DQN vs DRQN on MiniGrid-MemoryS7-v0",
+    fontsize=15, fontweight="bold", y=0.99
+)
+gs = gridspec.GridSpec(2, 2, hspace=0.40, wspace=0.30)
+
+ax1 = fig.add_subplot(gs[0, :])   # top full-width: success rate comparison
+ax2 = fig.add_subplot(gs[1, 0])   # bottom left: DRQN individual seeds
+ax3 = fig.add_subplot(gs[1, 1])   # bottom right: mean reward comparison
+
+# ── ax1: success rate — headline comparison ───────────────────────────────────
+bl_label = f"Baseline DQN (n={len(baseline_seeds)})"
+dr_label = f"DRQN / CNN+LSTM (n={len(drqn_seeds)})"
+
+ax1.plot(bl_steps_sr / 1e6, bl_mean_sr * 100,
+         color=BL_COLOR, linewidth=2.2, label=bl_label)
+if len(baseline_seeds) > 1:
+    ax1.fill_between(bl_steps_sr / 1e6,
+                     (bl_mean_sr - bl_std_sr) * 100,
+                     (bl_mean_sr + bl_std_sr) * 100,
+                     alpha=0.2, color=BL_COLOR)
+
+ax1.plot(dr_steps_sr / 1e6, dr_mean_sr * 100,
+         color=DRQN_COLOR, linewidth=2.2, label=dr_label)
+ax1.fill_between(dr_steps_sr / 1e6,
+                 (dr_mean_sr - dr_std_sr) * 100,
+                 (dr_mean_sr + dr_std_sr) * 100,
+                 alpha=0.2, color=DRQN_COLOR, label="±1 std")
+
+ax1.axhline(50, color="gray", linestyle="--", linewidth=1.6, label="Random chance (50%)")
+ax1.set_title("Eval Success Rate — Baseline DQN vs DRQN", fontsize=12)
+ax1.set_xlabel("Training steps (millions)")
+ax1.set_ylabel("Success rate (%)")
+ax1.legend(fontsize=10)
+ax1.grid(True, alpha=0.3)
+ax1.set_ylim(0, 105)
+
+# ── ax2: DRQN individual seeds ────────────────────────────────────────────────
+for seed, color in zip(drqn_seeds, SEED_COLORS):
+    steps, vals = dr_sr[seed]
+    ax2.plot(steps / 1e6, vals * 100, color=color,
+             linewidth=1.6, label=f"DRQN seed {seed}", alpha=0.85)
+# also show baseline for context
+for seed in baseline_seeds:
+    steps, vals = bl_sr[seed]
+    ax2.plot(steps / 1e6, vals * 100, color=BL_COLOR,
+             linewidth=1.4, linestyle="--", label=f"Baseline seed {seed}", alpha=0.7)
+ax2.axhline(50, color="gray", linestyle="--", linewidth=1.4, label="Random chance")
+ax2.set_title("Success Rate — Individual Seeds", fontsize=12)
+ax2.set_xlabel("Training steps (millions)")
+ax2.set_ylabel("Success rate (%)")
+ax2.legend(fontsize=9)
+ax2.grid(True, alpha=0.3)
+ax2.set_ylim(0, 105)
+
+# ── ax3: mean reward comparison ───────────────────────────────────────────────
+ax3.plot(bl_steps_rw / 1e6, bl_mean_rw,
+         color=BL_COLOR, linewidth=2.0, label=bl_label)
+if len(baseline_seeds) > 1:
+    ax3.fill_between(bl_steps_rw / 1e6,
+                     bl_mean_rw - bl_std_rw,
+                     bl_mean_rw + bl_std_rw,
+                     alpha=0.2, color=BL_COLOR)
+
+ax3.plot(dr_steps_rw / 1e6, dr_mean_rw,
+         color=DRQN_COLOR, linewidth=2.0, label=dr_label)
+ax3.fill_between(dr_steps_rw / 1e6,
+                 dr_mean_rw - dr_std_rw,
+                 dr_mean_rw + dr_std_rw,
+                 alpha=0.2, color=DRQN_COLOR, label="±1 std")
+
+ax3.set_title("Eval Mean Reward", fontsize=12)
+ax3.set_xlabel("Training steps (millions)")
+ax3.set_ylabel("Mean reward")
+ax3.legend(fontsize=9)
+ax3.grid(True, alpha=0.3)
+
+out = "results/minigrid_baseline_vs_drqn.png"
 plt.savefig(out, dpi=150, bbox_inches="tight")
-print(f"Saved: {out}")
-plt.show()
+print(f"\nSaved: {out}")
+
+# ── summary stats ─────────────────────────────────────────────────────────────
+print("\n=== Baseline DQN ===")
+for seed in baseline_seeds:
+    _, sr = bl_sr[seed]
+    _, rw = bl_rw[seed]
+    print(f"  Seed {seed}: final_success={sr[-1]*100:.1f}%  best_success={sr.max()*100:.1f}%  final_reward={rw[-1]:.3f}")
+
+print("\n=== DRQN ===")
+for seed in drqn_seeds:
+    _, sr = dr_sr[seed]
+    _, rw = dr_rw[seed]
+    print(f"  Seed {seed}: final_success={sr[-1]*100:.1f}%  best_success={sr.max()*100:.1f}%  final_reward={rw[-1]:.3f}")
