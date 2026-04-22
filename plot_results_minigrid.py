@@ -98,7 +98,8 @@ def discover_runs(prefix):
     for folder in sorted(os.listdir(runs_dir)):
         if folder.startswith(prefix):
             seed = int(folder.split("seed")[1].split("_")[0])
-            if seed not in seed_runs:  # keep first (earliest) match per seed
+            # keep latest (largest timestamp) match per seed
+            if seed not in seed_runs or folder > seed_runs[seed]:
                 seed_runs[seed] = folder
     return seed_runs
 

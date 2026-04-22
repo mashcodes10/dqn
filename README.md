@@ -189,9 +189,9 @@ Environment: `MiniGrid-MemoryS7-v0` — agent must remember an object seen at th
 
 | Seed | Final Eval Reward | Best Eval Reward | Final Success Rate | Best Success Rate |
 |------|------------------|-----------------|-------------------|------------------|
-| 0 | 0.120 | 0.394 | 23.0% | 45.0% |
+| 0 | 0.286 | 0.521 | 29.0% | 57.0% |
 
-The baseline DQN fails to solve the task, confirming that feedforward Q-networks cannot bridge the memory gap.
+The baseline DQN fails to consistently solve the task, confirming that feedforward Q-networks cannot reliably bridge the memory gap.
 
 #### DRQN (CNN + LSTM, sequence length 10, 2M steps)
 
@@ -230,6 +230,7 @@ DRQN achieves near-perfect performance across all seeds, with all three seeds re
 | Breakout seed 0 (10M) | NVIDIA RTX PRO 500 Blackwell | 10M | ~17 hours |
 | Breakout seed 1 (10M) | NVIDIA RTX PRO 500 Blackwell | 10M | ~17 hours |
 | Breakout seed 2 (10M) | NVIDIA RTX PRO 500 Blackwell | 10M | ~17 hours |
+| Baseline DQN seed 0 (2M) | NVIDIA RTX PRO 500 Blackwell | 2M | ~2 hours |
 | DRQN seed 0 (2M) | NVIDIA RTX PRO 500 Blackwell | 2M | ~5 hours |
 | DRQN seed 1 (2M) | NVIDIA RTX PRO 500 Blackwell | 2M | ~5 hours |
 | DRQN seed 2 (2M) | NVIDIA RTX PRO 500 Blackwell | 2M | ~5 hours |
