@@ -185,8 +185,8 @@ git push
 If two people push at the same time: `git pull --rebase && git push`. No
 conflicts — each seed writes to its own uniquely-timestamped folder.
 
-Do **not** run `git add -f results/` — that would sweep up 230 MB of other
-teammates' files.
+Do **not** run `git add -f results/` — that would sweep up 230 MB of
+unrelated files.
 
 ## Hyperparameters
 
