@@ -203,6 +203,8 @@ The baseline DQN fails to solve the task, confirming that feedforward Q-networks
 
 DRQN achieves near-perfect performance across all seeds, with all three seeds reaching 100% success rate at some point during training. The recurrent state allows the agent to remember the target object across the full episode.
 
+![MiniGrid Results](results/minigrid_baseline_vs_drqn.png)
+
 ## Known Issues & Divergences from Paper
 
 1. **Eval reporting bug (fixed):** Early runs used reward clipping and EpisodicLifeWrapper during evaluation, which reported artificially low scores (~5-7 instead of actual ~50+). Fixed in commit `7b3d853`.
