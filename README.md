@@ -35,9 +35,10 @@ Key ideas reproduced:
 │   ├── breakout.json       # Base config
 │   ├── breakout_5m.json    # 5M step config
 │   └── breakout_10m.json   # 10M step config (used for final results)
-├── train_atari.py          # Phase 1: DQN Atari training script
-├── train_minigrid.py       # Phase 2: Baseline DQN on MiniGrid
-├── train_minigrid_drqn.py  # Phase 2: DRQN (DQN + LSTM) on MiniGrid
+├── train_atari.py                # Phase 1: DQN Atari training script
+├── train_minigrid.py             # Phase 2: Baseline DQN on MiniGrid
+├── train_minigrid_drqn.py        # Phase 2: DRQN (DQN + LSTM) on MiniGrid
+├── train_minigrid_framestack.py  # Phase 2 ablation: DQN with K-frame stacking (no LSTM)
 ├── plot_results.py         # Atari result plots
 ├── plot_results_minigrid.py # MiniGrid result plots
 ├── DQN_Breakout_Colab.ipynb # Google Colab notebook (Drive checkpoints + auto-resume)
@@ -113,6 +114,79 @@ tensorboard --logdir results/runs
 # Plot MiniGrid results
 python plot_results_minigrid.py
 ```
+
+### Phase 2 Ablation: Frame-stacking DQN (Mac, per teammate)
+
+The ablation tests whether the **LSTM recurrence** is what made DRQN work, or
+whether simply giving the CNN more context (the last K frames) is enough.
+Same CNN, same hyperparameters as the baseline — the only change is stacking
+the last 10 frames along the channel axis instead of using an LSTM.
+
+Three teammates, one seed each:
+
+| Teammate  | Seed | Launcher                     |
+|-----------|------|------------------------------|
+| Mia       | 0    | `./run_framestack_seed0.sh`  |
+| Carolina  | 1    | `./run_framestack_seed1.sh`  |
+| Yamilet   | 2    | `./run_framestack_seed2.sh`  |
+
+#### One-time setup (each Mac)
+```bash
+conda create -n dqn python=3.11 -y
+conda activate dqn
+pip install torch torchvision gymnasium minigrid \
+    tensorboard matplotlib numpy opencv-python-headless
+```
+
+#### Pull latest code
+```bash
+cd path/to/dqn
+git pull
+```
+
+#### Run YOUR seed
+Use `caffeinate -i` so the Mac doesn't sleep mid-run:
+```bash
+caffeinate -i ./run_framestack_seed0.sh   # change 0 to your seed
+```
+
+Expect **~8–12 hrs on Apple Silicon** (2M steps, single seed). Keep the laptop
+lid open — `caffeinate -i` prevents idle sleep but not lid-close sleep.
+If you need to close the lid, run this first (and undo with `0` when done):
+```bash
+sudo pmset -a disablesleep 1
+```
+
+First eval prints at step 10,000. If `eval_reward` is sensible by step ~50k,
+it's safe to walk away. If the run errors early, stop and flag it — don't let
+a broken run burn 12 hrs of compute.
+
+#### Monitor (optional, second terminal)
+```bash
+conda activate dqn
+tensorboard --logdir results/runs
+# open http://localhost:6006 and look for memory_framestack_seed{YOUR_SEED}_*
+```
+
+#### Push YOUR results when done
+
+`results/` and `*.pt` are in `.gitignore`, so force-add **only your seed's files**:
+```bash
+# replace 0 with your seed number in both paths
+git pull
+git add -f results/runs/memory_framestack_seed0_K10_*/
+git add -f results/checkpoints/memory_framestack_seed0_K10.pt
+
+git status   # sanity: 1 TB log + 1 .pt (~5 MB total)
+git commit -m "Add framestack ablation: seed 0, 2M steps"
+git push
+```
+
+If two people push at the same time: `git pull --rebase && git push`. No
+conflicts — each seed writes to its own uniquely-timestamped folder.
+
+Do **not** run `git add -f results/` — that would sweep up 230 MB of other
+teammates' files.
 
 ## Hyperparameters
 
