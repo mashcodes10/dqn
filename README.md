@@ -230,7 +230,7 @@ DRQN achieves near-perfect performance across all seeds, with all three seeds re
 | Breakout seed 0 (10M) | NVIDIA RTX PRO 500 Blackwell | 10M | ~17 hours |
 | Breakout seed 1 (10M) | NVIDIA RTX PRO 500 Blackwell | 10M | ~17 hours |
 | Breakout seed 2 (10M) | NVIDIA RTX PRO 500 Blackwell | 10M | ~17 hours |
-| Baseline DQN seed 0 (2M) | NVIDIA RTX PRO 500 Blackwell | 2M | ~2 hours |
+| Baseline DQN seed 0 (2M) | mias-macbook-air-3023 | 2M | ~2 hours |
 | DRQN seed 0 (2M) | NVIDIA RTX PRO 500 Blackwell | 2M | ~5 hours |
 | DRQN seed 1 (2M) | NVIDIA RTX PRO 500 Blackwell | 2M | ~5 hours |
 | DRQN seed 2 (2M) | NVIDIA RTX PRO 500 Blackwell | 2M | ~5 hours |
