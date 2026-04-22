@@ -161,7 +161,7 @@ All 3 seeds trained for 10M steps on NVIDIA RTX PRO 500 Blackwell GPU (~165 FPS)
 |------|------------------|-----------------|
 | 0 | 55.9 | 64.7 |
 | 1 | 54.4 | 63.7 |
-| 2 | 45.8 | 60.5 |
+| 2 | 45.8 | 63.9 |
 | **Mean ± Std** | **52.0 ± 5.3** | — |
 
 ![Training Results](results/training_3seeds.png)
