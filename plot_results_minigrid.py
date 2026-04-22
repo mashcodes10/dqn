@@ -179,7 +179,7 @@ ax1.fill_between(dr_steps_sr / 1e6,
                  alpha=0.2, color=DRQN_COLOR, label="±1 std")
 
 ax1.axhline(50, color="gray", linestyle="--", linewidth=1.6, label="Random chance (50%)")
-ax1.set_title("Eval Success Rate — Baseline DQN vs DRQN", fontsize=12)
+ax1.set_title("Eval Success Rate - Baseline DQN vs DRQN", fontsize=12)
 ax1.set_xlabel("Training steps (millions)")
 ax1.set_ylabel("Success rate (%)")
 ax1.legend(fontsize=10)
@@ -197,7 +197,7 @@ for seed in baseline_seeds:
     ax2.plot(steps / 1e6, vals * 100, color=BL_COLOR,
              linewidth=1.4, linestyle="--", label=f"Baseline seed {seed}", alpha=0.7)
 ax2.axhline(50, color="gray", linestyle="--", linewidth=1.4, label="Random chance")
-ax2.set_title("Success Rate — Individual Seeds", fontsize=12)
+ax2.set_title("Success Rate - Individual Seeds", fontsize=12)
 ax2.set_xlabel("Training steps (millions)")
 ax2.set_ylabel("Success rate (%)")
 ax2.legend(fontsize=9)
