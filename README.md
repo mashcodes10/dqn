@@ -115,7 +115,7 @@ tensorboard --logdir results/runs
 python plot_results_minigrid.py
 ```
 
-### Phase 2 Ablation: Frame-stacking DQN (Mac, per teammate)
+### Phase 2 Ablation: Frame-stacking DQN
 
 The ablation tests whether the **LSTM recurrence** is what made DRQN work, or
 whether simply giving the CNN more context (the last K frames) is enough.
