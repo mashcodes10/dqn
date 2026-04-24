@@ -10,6 +10,7 @@ This project has two phases:
 |-------|------------|------|--------|
 | **Phase 1: Reproduction** | ALE Breakout (Atari) | Train DQN from pixels, show it learns | Complete |
 | **Phase 2: Adaptation** | MiniGrid MemoryEnv | Add recurrent memory (DRQN) to handle partial observability | Complete |
+| **Phase 2: Ablation** | MiniGrid MemoryEnv | Frame-stacking DQN (K=10, no LSTM) — isolates recurrence as the design change | Complete |
 
 ## Paper Reference
 
@@ -45,6 +46,7 @@ Key ideas reproduced:
 ├── results/
 │   ├── runs/               # TensorBoard logs
 │   ├── checkpoints/        # Model checkpoints (.pt files)
+│   ├── demo/               # Qualitative gameplay clips (Breakout, baseline, DRQN)
 │   └── training_3seeds.png # Phase 1 results plot
 └── Final_Project.pdf       # Project assignment specification
 ```
@@ -278,6 +280,22 @@ The baseline DQN fails to consistently solve the task, confirming that feedforwa
 DRQN achieves near-perfect performance across all seeds, with all three seeds reaching 100% success rate at some point during training. The recurrent state allows the agent to remember the target object across the full episode.
 
 ![MiniGrid Results](results/minigrid_baseline_vs_drqn.png)
+
+#### Ablation: Frame-stacking DQN (K=10, no LSTM, 2M steps)
+
+To isolate **whether the LSTM recurrence — and not just access to more past frames — is what makes DRQN succeed**, we replaced the LSTM with channel-axis frame-stacking of the last K=10 frames, matching the DRQN's BPTT window. Same CNN, same hyperparameters, same total steps. If extra context alone were enough, this should solve the task; if memory *per se* is required, it should fail.
+
+| Seed | Final Eval Reward | Best Eval Reward | Final Success Rate | Best Success Rate |
+|------|------------------|-----------------|-------------------|------------------|
+| 0 | 0.000 | 0.459 | 0% | 50% |
+| 1 | 0.000 | 0.418 | 0% | 44% |
+| 2 | 0.000 | 0.370 | 0% | 38% |
+
+All three seeds peaked partway through training (~0.37–0.46 best eval reward, ~38–50% best success rate) and then **collapsed to 0 by ~800k steps**, staying flat for the remaining ~1.2M steps. Training reward remained ~0.45 because ε=0.1 random actions occasionally stumbled into reward, but greedy evaluation (ε=0.0) found no consistent policy.
+
+**Why it fails:** in MemoryS7 the agent must walk down a corridor (taking turn + forward actions, more than 10 env steps) between seeing the cue and reaching the T-junction. By the decision step, the cue is no longer in any of the last K=10 frames, so the input contains no information about the correct action. The LSTM hidden state in DRQN compresses information across **all** past observations and carries the cue forward indefinitely; a fixed K-frame window cannot.
+
+**Conclusion:** the recurrence — not the extra context — is what enables memory. This is the design change responsible for DRQN's ~88–100% success vs. baseline DQN's ~17%.
 
 ## Known Issues & Divergences from Paper
 
